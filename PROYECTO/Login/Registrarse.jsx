@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { supabase } from './../BD/supabase.js'; // Asegúrate que la ruta sea correcta
 
 const PRIMARY_COLOR = '#1E90FF'; // Azul Dodger
 
@@ -8,8 +9,9 @@ export default function Registrarse({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     if (!nombre || !email || !password || !confirmPassword) {
       Alert.alert('❌ Error', 'Por favor completa todos los campos');
       return;
@@ -20,8 +22,42 @@ export default function Registrarse({ navigation }) {
       return;
     }
 
-    Alert.alert('✅ Cuenta creada', '¡Registro exitoso! Ahora puedes iniciar sesión');
-    navigation.navigate('IniciarSesion'); 
+    try {
+      setLoading(true);
+
+      // 1️⃣ Crear usuario en Supabase Auth
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password: password,
+      });
+
+      if (error) throw error;
+
+      const user = data.user;
+
+      if (!user) {
+        throw new Error('No se pudo crear la cuenta');
+      }
+
+      // 2️⃣ Insertar en la tabla "usuarios"
+      const { error: dbError } = await supabase.from('usuarios').insert([
+        {
+          id: user.id, // usa el mismo ID de Supabase Auth
+          nombre: nombre.trim(),
+          tokens_disponibles: 10,
+        },
+      ]);
+
+      if (dbError) throw dbError;
+
+      Alert.alert('✅ Registro exitoso', 'Tu cuenta ha sido creada correctamente');
+      navigation.navigate('IniciarSesion');
+    } catch (error) {
+      console.error(error);
+      Alert.alert('⚠️ Error en el registro', error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -77,8 +113,14 @@ export default function Registrarse({ navigation }) {
       />
 
       {/* Botón Crear Cuenta */}
-      <TouchableOpacity style={styles.registerButton} onPress={handleRegister}>
-        <Text style={styles.registerButtonText}>Crear Cuenta</Text>
+      <TouchableOpacity
+        style={[styles.registerButton, loading && { opacity: 0.5 }]}
+        onPress={handleRegister}
+        disabled={loading}
+      >
+        <Text style={styles.registerButtonText}>
+          {loading ? 'Creando cuenta...' : 'Crear Cuenta'}
+        </Text>
       </TouchableOpacity>
 
       {/* Enlace a iniciar sesión */}
